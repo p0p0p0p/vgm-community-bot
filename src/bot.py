@@ -3,6 +3,13 @@ from fuzzywuzzy import fuzz
 import requests
 import csv
 
+"""
+TODO:
+
+Send responses as an embed
+Add literal string search with "example"
+"""
+
 discord.opus.load_opus
 SID = 1 # "Game" station
 STATION = requests.get('http://rainwave.cc/api4/stations').json()['stations'][SID-1]['stream']
@@ -30,6 +37,7 @@ def fuzzy_match(query, target):
     for n in range(len(NUMWORDS)): # Series must match numeric entry exactly
         if query.endswith(' {0}'.format(n)) or query.endswith(' {0}'.format(NUMWORDS[n][0].lower())) or query.endswith(' {0}'.format(NUMWORDS[n][1].lower())):
             if not (target.endswith(' {0}'.format(n)) or target.endswith(' {0}'.format(NUMWORDS[n][0].lower())) or target.endswith(' {0}'.format(NUMWORDS[n][1].lower()))):
+                # Probably not a match, but target might have a subtitle like Final Fantasy XIV: Heavensward
                 if not (' {0} '.format(n) in target or ' {0} '.format(NUMWORDS[n][0].lower()) in target or ' {0} '.format(NUMWORDS[n][1].lower()) in target):
                     return False
     if fuzz.ratio(query, target) > 80: # Approximate full match
@@ -106,7 +114,7 @@ def query_channel(source, label, generator, joint, game, song, max_results):
                     info += generator(row)
 
     if count > max_results:
-        info += '\n{0} more entr{1} hidden... (PM for full results)'.format(count - max_results, 'y' if count-max_results == 1 else 'ies')
+        info += '\n{0} more entr{1} hidden... (DM for full results)'.format(count - max_results, 'y' if count-max_results == 1 else 'ies')
     elif count == 0:
         info = 'No {0} entries found.'.format(label)
     return info
@@ -193,8 +201,11 @@ class RadioBot(discord.Client):
                     await message.channel.send("I'm not playing anything right now, but you can use this command to restart the live connection.")
             elif command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
                 tokens = message.content[len(command):].lstrip() # Discord automatically rstrips
-                if tokens == "":
-                    await message.channel.send("Please provide an argument in the form of Keyword, Game--Song, Game--, or --Song")
+                if tokens == "" or all(not(c.isalnum()) for c in tokens):
+                    if command == 'r.mg':
+                        await message.channel.send("Search using Keyword, Artist--Song, Artist--, or --Song")
+                    else:
+                        await message.channel.send("Search using Keyword, Game--Song, Game--, or --Song")
                     return
 
                 to_split = '--' in tokens
@@ -211,7 +222,7 @@ class RadioBot(discord.Client):
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                     await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                     await message.channel.send(query_channel('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} (Best: Round {2}, Most recent: VGMC {3})'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 3))
-                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average rating {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
+                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 3))
                     await message.channel.send(query_channel('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                 elif command == 'r.b8':
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 6))
@@ -219,24 +230,30 @@ class RadioBot(discord.Client):
                 elif command == 'r.sv':
                     await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
                 elif command == 'r.rt':
-                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average rating {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
+                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 8))
                 elif command == 'r.sd':
                     await message.channel.send(query_channel('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
                 elif command == 'r.mg':
                     await message.channel.send(query_channel('mgg.csv', 'Siiva MGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
             elif command == 'r.help':
                 await message.channel.send(
+                    "Maintained by haha oh no#5316 a.k.a. PIayer_0\n"
+                    "You can DM me commands too, try it!\n"
                     "Help: r.help, r.src\n"
-                    "Data query: r.b8, r.sv, r.rt, r.sd, r.all, r.mg\n"
+                    "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
                     "Radio: r.join, r.refresh, r.leave, r.np")
             elif command == 'r.np':
                 await message.channel.send(get_track_info())
             elif command == 'r.src':
-                info = "Bot updates are every few months, each source is current up to... (mm/dd/yyyy) [sheet maintainers]\n"
+                await message.channel.send("Check Pastebins for up-to-date data, bot's local data is current up to: (mm/dd/yyyy)")
+                info = ""
                 with open("sources.csv", newline='') as csvref:
                     csvdata = csv.reader(csvref)
                     for row in csvdata:
-                        info += '{0}: {1} [{2}]\n'.format(row[0], row[1], row[2])
+                        pastebin = ""
+                        if row[2]:
+                            pastebin = "[<{}>]".format(row[2])
+                        info += '{0}: {1} {2}\n'.format(row[0], row[1], pastebin)
                 await message.channel.send(info)
             elif command == 'r.echo':
                 await message.channel.send(message.content[len(command):].lstrip())
@@ -244,7 +261,10 @@ class RadioBot(discord.Client):
             if command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
                 tokens = message.content[len(command):].lstrip() # Discord automatically rstrips
                 if tokens == "":
-                    await message.channel.send("Please provide an argument in the form of Keyword, Game--Song, Game--, or --Song")
+                    if command == 'r.mg' or all(not(c.isalnum()) for c in tokens):
+                        await message.channel.send("Search using Keyword, Artist--Song, Artist--, or --Song")
+                    else:
+                        await message.channel.send("Search using Keyword, Game--Song, Game--, or --Song")
                     return
 
                 to_split = '--' in tokens
@@ -266,7 +286,7 @@ class RadioBot(discord.Client):
                     for b in query_private('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
                         await message.channel.send(b)
                 if command in ('r.all', 'r.rt'):
-                    for b in query_private('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average rating {2})'.format(r[0], r[1], r[2]), to_split, game, song):
+                    for b in query_private('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song):
                         await message.channel.send(b)
                 if command in ('r.all', 'r.sd'):
                     for b in query_private('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
@@ -274,19 +294,26 @@ class RadioBot(discord.Client):
                 if command == 'r.mg':
                     for b in query_private('mgg.csv', 'Siiva MGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
                         await message.channel.send(b)
+
+                await message.channel.send(":warning: Use `r.src` to check how out-of-date these results are")
             elif command == 'r.help':
                 await message.channel.send(
+                    "Maintained by haha oh no#5316 a.k.a. PIayer_0\n"
                     "Help: r.help, r.src\n"
-                    "Data query: r.b8, r.sv, r.rt, r.sd, r.all, r.mg\n"
-                    "Radio: r.join, r.refresh, r.leave, r.np (not available in PMs)")
+                    "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
+                    "Radio: r.join, r.refresh, r.leave, r.np (not available in DMs)")
             elif command == 'r.np':
                 await message.channel.send(get_track_info())
             elif command == 'r.src':
-                info = "Bot updates are every few months, each source is current up to... (mm/dd/yyyy) [sheet maintainers]\n"
+                await message.channel.send("Check Pastebins for up-to-date data, bot's local data is current up to: (mm/dd/yyyy)")
+                info = ""
                 with open("sources.csv", newline='') as csvref:
                     csvdata = csv.reader(csvref)
                     for row in csvdata:
-                        info += '{0}: {1} [{2}]\n'.format(row[0], row[1], row[2])
+                        pastebin = ""
+                        if row[2]:
+                            pastebin = "[<{}>]".format(row[2])
+                        info += '{0}: {1} {2}\n'.format(row[0], row[1], pastebin)
                 await message.channel.send(info)
             elif command == 'r.echo':
                 await message.channel.send(message.content[len(command):].lstrip())
