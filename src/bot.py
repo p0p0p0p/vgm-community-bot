@@ -6,12 +6,12 @@ import csv
 """
 TODO:
 
+Fix r.join command
 Send responses as an embed
-Add literal string search with "example"
 """
 
 discord.opus.load_opus
-SID = 1 # "Game" station
+SID = 1  # "Game" station
 STATION = requests.get('http://rainwave.cc/api4/stations').json()['stations'][SID-1]['stream']
 NUMWORDS = (('0','Zero'),('I','One'),('II','Two'),('III','Three'),('IV','Four'),('V','Five'),
             ('VI','Six'),('VII','Seven'),('VIII','Eight'),('IX','Nine'),('X','Ten'),
@@ -20,36 +20,47 @@ NUMWORDS = (('0','Zero'),('I','One'),('II','Two'),('III','Three'),('IV','Four'),
 with open('token.txt') as file:
     TOKEN = file.read().splitlines()[0]
 
-def strip(s):
+def is_quoted(s):
+    return len(s) > 1 and s[0] == '"' and s[-1] == '"'
+
+def title_strip(s, preserve_quotes=False):
     result = ""
     for c in s:
-        if c.isalnum() or c.isspace(): # 0-9, a-z, spaces
+        if c.isalnum() or c.isspace():  # 0-9, a-z, spaces
             result += c.lower()
         elif c in '/\\|-~_:;,.&+':
             result += ' '
+
+    if preserve_quotes and is_quoted(s):
+        result = '"' + result
+        result += '"'
     return result
 
 def fuzzy_match(query, target):
-    if query == "": # Can match anything
+    if query == "":  # Match anything to support Game-- and --Song
         return True
-    if target == "": # Error in data source
+    if target == "":  # Error in data source
         return False
-    for n in range(len(NUMWORDS)): # Series must match numeric entry exactly
+    if is_quoted(query):
+        return fuzz.ratio(query[1:-1], target) > 95  # Require near-perfect match
+
+    for n in range(len(NUMWORDS)):  # Series must match numeric entry exactly
         if query.endswith(' {0}'.format(n)) or query.endswith(' {0}'.format(NUMWORDS[n][0].lower())) or query.endswith(' {0}'.format(NUMWORDS[n][1].lower())):
             if not (target.endswith(' {0}'.format(n)) or target.endswith(' {0}'.format(NUMWORDS[n][0].lower())) or target.endswith(' {0}'.format(NUMWORDS[n][1].lower()))):
                 # Probably not a match, but target might have a subtitle like Final Fantasy XIV: Heavensward
                 if not (' {0} '.format(n) in target or ' {0} '.format(NUMWORDS[n][0].lower()) in target or ' {0} '.format(NUMWORDS[n][1].lower()) in target):
                     return False
-    if fuzz.ratio(query, target) > 80: # Approximate full match
+
+    if fuzz.ratio(query, target) > 80:  # Approximate full match
         return True
 
     query_tokens = query.split()
     target_tokens = target.split()
     m = len(query_tokens)
     M = len(target_tokens)
-    if m > M: # Query phrase can't fit
+    if m > M:  # Query phrase can't fit
         return False
-    for offset in range(M-m+1):
+    for offset in range(M-m+1):  # Check that all words match with 90%
         sub_match = True
         for i in range(m):
             if fuzz.ratio(query_tokens[i], target_tokens[offset+i]) < 90:
@@ -72,7 +83,7 @@ def get_track_info():
     info += '\n' + ', '.join(artist['name'] for artist in current_songs['songs'][0]['artists'])
     info += '\nStation: <https://rainwave.cc/game>'
 
-    game_strip = strip(game) # 0-9, a-z, spaces   
+    game_strip = title_strip(game, preserve_quotes=True) 
     info += query_summary('vgmgg.csv', 'B8 VGMGG', game_strip)
     info += query_summary('siiva.csv', 'Siiva VGMGG', game_strip)
     info += query_summary('vgmc.csv', 'VGMC', game_strip)
@@ -87,7 +98,7 @@ def query_summary(source, label, game):
     with open(source, newline='') as csvref:
         csvdata = csv.reader(csvref)
         for row in csvdata:
-            row0_strip = strip(row[0])
+            row0_strip = title_strip(row[0])
             if fuzzy_match(game, row0_strip):
                 if game_match == "":
                     game_match = row[0]
@@ -101,8 +112,8 @@ def query_channel(source, label, generator, joint, game, song, max_results):
     with open(source, newline='') as csvref:
         csvdata = csv.reader(csvref)
         for row in csvdata:
-            row0_strip = strip(row[0])
-            row1_strip = strip(row[1])
+            row0_strip = title_strip(row[0])
+            row1_strip = title_strip(row[1])
             if joint:
                 if fuzzy_match(game, row0_strip) and fuzzy_match(song, row1_strip):
                     count += 1
@@ -120,15 +131,15 @@ def query_channel(source, label, generator, joint, game, song, max_results):
     return info
 
 def query_private(source, label, generator, joint, game, song):
-    MAX_LENGTH = 1980 # 20-character buffer just in case
+    MAX_LENGTH = 1980  # 20-character buffer just in case
     blocks = []
     info = ""
     count = 0
     with open(source, newline='') as csvref:
         csvdata = csv.reader(csvref)
         for row in csvdata:
-            row0_strip = strip(row[0])
-            row1_strip = strip(row[1])
+            row0_strip = title_strip(row[0])
+            row1_strip = title_strip(row[1])
             if joint:
                 if fuzzy_match(game, row0_strip) and fuzzy_match(song, row1_strip):
                     count += 1
@@ -179,7 +190,7 @@ class RadioBot(discord.Client):
             vclient = message.guild.voice_client
             if command == 'r.join':
                 vstate = message.author.voice
-                if vstate and vstate.channel:
+                if False: #vstate and vstate.channel:
                     if vclient:
                         await vclient.move_to(vstate.channel)
                     else:
@@ -188,7 +199,8 @@ class RadioBot(discord.Client):
                         source = discord.FFmpegPCMAudio(STATION)
                         vclient.play(source)
                 else:
-                    await message.channel.send("You must be in a voice channel first.")
+                    #await message.channel.send("You must be in a voice channel first.")
+                    await message.channel.send("Command is under construction!")
             elif command == 'r.leave':
                 if vclient:
                     await vclient.disconnect()
@@ -200,12 +212,12 @@ class RadioBot(discord.Client):
                 else:
                     await message.channel.send("I'm not playing anything right now, but you can use this command to restart the live connection.")
             elif command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
-                tokens = message.content[len(command):].lstrip() # Discord automatically rstrips
+                tokens = message.content[len(command):].lstrip()  # Discord automatically rstrips
                 if tokens == "" or all(not(c.isalnum()) for c in tokens):
                     if command == 'r.mg':
-                        await message.channel.send("Search using Keyword, Artist--Song, Artist--, or --Song")
+                        await message.channel.send('Search using Keyword, Artist--Song, "Exact Artist"--"Exact Song", Artist--, or --Song')
                     else:
-                        await message.channel.send("Search using Keyword, Game--Song, Game--, or --Song")
+                        await message.channel.send('Search using Keyword, Game--Song, "Exact Game"--"Exact Song", Game--, or --Song')
                     return
 
                 to_split = '--' in tokens
@@ -213,12 +225,12 @@ class RadioBot(discord.Client):
                 song = ""
                 if to_split:
                     tokens = tokens.split('--')
-                    game = strip(tokens[0])
-                    song = strip(tokens[1])
+                    game = title_strip(tokens[0], preserve_quotes=True)
+                    song = title_strip(tokens[1], preserve_quotes=True)
                 else:
-                    game = strip(tokens)
+                    game = title_strip(tokens, preserve_quotes=True)
 
-                if command == 'r.all': # Limit to 3 lines each
+                if command == 'r.all':  # Limit to 3 lines each
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                     await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                     await message.channel.send(query_channel('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} (Best: Round {2}, Most recent: VGMC {3})'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 3))
@@ -237,7 +249,7 @@ class RadioBot(discord.Client):
                     await message.channel.send(query_channel('mgg.csv', 'Siiva MGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
             elif command == 'r.help':
                 await message.channel.send(
-                    "Maintained by haha oh no#5316 a.k.a. PIayer_0\n"
+                    "Maintained by haha_oh_no#5316 a.k.a. PIayer_0\n"
                     "You can DM me commands too, try it!\n"
                     "Help: r.help, r.src\n"
                     "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
@@ -257,14 +269,14 @@ class RadioBot(discord.Client):
                 await message.channel.send(info)
             elif command == 'r.echo':
                 await message.channel.send(message.content[len(command):].lstrip())
-        else: # Private or group channel
+        else:  # Private or group channel
             if command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
-                tokens = message.content[len(command):].lstrip() # Discord automatically rstrips
-                if tokens == "":
-                    if command == 'r.mg' or all(not(c.isalnum()) for c in tokens):
-                        await message.channel.send("Search using Keyword, Artist--Song, Artist--, or --Song")
+                tokens = message.content[len(command):].lstrip()  # Discord automatically rstrips
+                if tokens == "" or all(not(c.isalnum()) for c in tokens):
+                    if command == 'r.mg':
+                        await message.channel.send('Search using Keyword, Artist--Song, "Exact Artist"--"Exact Song", Artist--, or --Song')
                     else:
-                        await message.channel.send("Search using Keyword, Game--Song, Game--, or --Song")
+                        await message.channel.send('Search using Keyword, Game--Song, "Exact Game"--"Exact Song", Game--, or --Song')
                     return
 
                 to_split = '--' in tokens
@@ -272,10 +284,10 @@ class RadioBot(discord.Client):
                 song = ""
                 if to_split:
                     tokens = tokens.split('--')
-                    game = strip(tokens[0])
-                    song = strip(tokens[1])
+                    game = title_strip(tokens[0], preserve_quotes=True)
+                    song = title_strip(tokens[1], preserve_quotes=True)
                 else:
-                    game = strip(tokens)
+                    game = title_strip(tokens, preserve_quotes=True)
 
                 if command in ('r.all', 'r.b8'):
                     for b in query_private('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
@@ -298,7 +310,7 @@ class RadioBot(discord.Client):
                 await message.channel.send(":warning: Use `r.src` to check how out-of-date these results are")
             elif command == 'r.help':
                 await message.channel.send(
-                    "Maintained by haha oh no#5316 a.k.a. PIayer_0\n"
+                    "Maintained by haha_oh_no#5316 a.k.a. PIayer_0\n"
                     "Help: r.help, r.src\n"
                     "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
                     "Radio: r.join, r.refresh, r.leave, r.np (not available in DMs)")
