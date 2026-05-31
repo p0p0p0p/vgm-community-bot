@@ -106,9 +106,10 @@ def query_summary(source, label, game):
 
     return '\n{1} appearance{2} in {3}{0}'.format(' (' + game_match + ')' if count > 0 else "", count, "" if count == 1 else 's', label)
 
-def query_channel(source, label, generator, joint, game, song, max_results):
+def query_channel(source, label, generator, joint, game, song, max_lines):
     info = ""
     count = 0
+    final_match = ""
     with open(source, newline='') as csvref:
         csvdata = csv.reader(csvref)
         for row in csvdata:
@@ -117,17 +118,24 @@ def query_channel(source, label, generator, joint, game, song, max_results):
             if joint:
                 if fuzzy_match(game, row0_strip) and fuzzy_match(song, row1_strip):
                     count += 1
-                    if count <= max_results:
+                    if count < max_lines:
                         info += generator(row)
+                    elif count == max_lines:
+                        final_match = generator(row)
             elif fuzzy_match(game, row0_strip) or fuzzy_match(game, row1_strip):
                 count += 1
-                if count <= max_results:
+                if count < max_lines:
                     info += generator(row)
+                elif count == max_lines:
+                    final_match = generator(row)
 
-    if count > max_results:
-        info += '\n{0} more entr{1} hidden... (DM for full results)'.format(count - max_results, 'y' if count-max_results == 1 else 'ies')
-    elif count == 0:
+    if count == 0:
         info = 'No {0} entries found.'.format(label)
+    elif count == max_lines:
+        # Add final match since it takes up about the same space as the More entries string
+        info += final_match
+    elif count > max_lines:
+        info += '\n{0} more entries hidden... (DM for full results)'.format(count - max_lines + 1)
     return info
 
 def query_private(source, label, generator, joint, game, song):
@@ -211,7 +219,7 @@ class RadioBot(discord.Client):
                     vclient.play(source)
                 else:
                     await message.channel.send("I'm not playing anything right now, but you can use this command to restart the live connection.")
-            elif command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
+            elif command in ('r.all', 'r.b8', 'r.v8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
                 tokens = message.content[len(command):].lstrip()  # Discord automatically rstrips
                 if tokens == "" or all(not(c.isalnum()) for c in tokens):
                     if command == 'r.mg':
@@ -230,29 +238,34 @@ class RadioBot(discord.Client):
                 else:
                     game = title_strip(tokens, preserve_quotes=True)
 
+                vgmc_default = lambda r: '\n{0} \u2014 {1} (VGMC history: {3})'.format(r[0], r[1], r[2], r[3])
+                vgmc_composers = lambda r: '\n{0} \u2014 {1} [{2}] (VGMC history: {3})'.format(r[0], r[1], r[2], r[3])
+
                 if command == 'r.all':  # Limit to 3 lines each
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
+                    await message.channel.send(query_channel('vgmc.csv', 'VGMC', vgmc_default, to_split, game, song, 3))
                     await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
-                    await message.channel.send(query_channel('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} (VGMC history: {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                     await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 3))
                     await message.channel.send(query_channel('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
                 elif command == 'r.b8':
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 6))
-                    await message.channel.send(query_channel('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} (VGMC history: {2})'.format(r[0], r[1], r[2]), to_split, game, song, 6))
+                    await message.channel.send(query_channel('vgmc.csv', 'VGMC', vgmc_default, to_split, game, song, 6))
+                elif command == 'r.v8':
+                    await message.channel.send(query_channel('vgmc.csv', 'VGMC', vgmc_composers, to_split, game, song, 10))
                 elif command == 'r.sv':
-                    await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
+                    await message.channel.send(query_channel('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 12))
                 elif command == 'r.rt':
-                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 8))
+                    await message.channel.send(query_channel('rtvgm.csv', 'RtVGM', lambda r: '\n{0} \u2014 {1} (Average {3}, {2} votes)'.format(r[0], r[1], r[2], r[3]), to_split, game, song, 12))
                 elif command == 'r.sd':
-                    await message.channel.send(query_channel('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
+                    await message.channel.send(query_channel('supra.csv', 'Supra VGMGG', lambda r: '\n{0} \u2014 {1} (Supra list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 12))
                 elif command == 'r.mg':
-                    await message.channel.send(query_channel('mgg.csv', 'Siiva MGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 8))
+                    await message.channel.send(query_channel('mgg.csv', 'Siiva MGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 12))
             elif command == 'r.help':
                 await message.channel.send(
                     "Maintained by haha_oh_no a.k.a. PIayer_0\n"
                     "You can DM me commands too, try it!\n"
                     "Help: r.help, r.src\n"
-                    "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
+                    "Data search: r.b8, r.v8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
                     "Radio: r.join, r.refresh, r.leave, r.np")
             elif command == 'r.np':
                 await message.channel.send(get_track_info())
@@ -270,7 +283,7 @@ class RadioBot(discord.Client):
             elif command == 'r.echo':
                 await message.channel.send(message.content[len(command):].lstrip())
         else:  # Private or group channel
-            if command in ('r.all', 'r.b8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
+            if command in ('r.all', 'r.b8', 'r.v8', 'r.sv', 'r.rt', 'r.sd', 'r.mg'):
                 tokens = message.content[len(command):].lstrip()  # Discord automatically rstrips
                 if tokens == "" or all(not(c.isalnum()) for c in tokens):
                     if command == 'r.mg':
@@ -292,7 +305,9 @@ class RadioBot(discord.Client):
                 if command in ('r.all', 'r.b8'):
                     for b in query_private('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
                         await message.channel.send(b)
-                    for b in query_private('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} (VGMC history: {2})'.format(r[0], r[1], r[2]), to_split, game, song):
+                if command in ('r.all', 'r.b8', 'r.v8'):
+                    # Always include composers
+                    for b in query_private('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} [{2}] (VGMC history: {3})'.format(r[0], r[1], r[2], r[3]), to_split, game, song):
                         await message.channel.send(b)
                 if command in ('r.all', 'r.sv'):
                     for b in query_private('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
@@ -312,7 +327,7 @@ class RadioBot(discord.Client):
                 await message.channel.send(
                     "Maintained by haha_oh_no a.k.a. PIayer_0\n"
                     "Help: r.help, r.src\n"
-                    "Data search: r.b8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
+                    "Data search: r.b8, r.v8, r.sv, r.rt, r.sd, r.all, r.mg (use with no arguments for more help)\n"
                     "Radio: r.join, r.refresh, r.leave, r.np (not available in DMs)")
             elif command == 'r.np':
                 await message.channel.send(get_track_info())
