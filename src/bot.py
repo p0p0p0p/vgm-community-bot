@@ -238,8 +238,8 @@ class RadioBot(discord.Client):
                 else:
                     game = title_strip(tokens, preserve_quotes=True)
 
-                vgmc_default = lambda r: '\n{0} \u2014 {1} (VGMC history: {3})'.format(r[0], r[1], r[2], r[3])
-                vgmc_composers = lambda r: '\n{0} \u2014 {1} [{2}] (VGMC history: {3})'.format(r[0], r[1], r[2], r[3])
+                vgmc_default = lambda r: '\n{0} \u2014 {1} (VGMCs: {3})'.format(r[0], r[1], r[2], r[3])
+                vgmc_composers = lambda r: '\n{0} \u2014 {1} [{2}] (VGMCs: {3})'.format(r[0], r[1], r[2], r[3])
 
                 if command == 'r.all':  # Limit to 3 lines each
                     await message.channel.send(query_channel('vgmgg.csv', 'B8 VGMGG', lambda r: '\n{0} \u2014 {1} (B8 list by {2})'.format(r[0], r[1], r[2]), to_split, game, song, 3))
@@ -307,7 +307,7 @@ class RadioBot(discord.Client):
                         await message.channel.send(b)
                 if command in ('r.all', 'r.b8', 'r.v8'):
                     # Always include composers
-                    for b in query_private('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} [{2}] (VGMC history: {3})'.format(r[0], r[1], r[2], r[3]), to_split, game, song):
+                    for b in query_private('vgmc.csv', 'VGMC', lambda r: '\n{0} \u2014 {1} [{2}] (VGMCs: {3})'.format(r[0], r[1], r[2], r[3]), to_split, game, song):
                         await message.channel.send(b)
                 if command in ('r.all', 'r.sv'):
                     for b in query_private('siiva.csv', 'Siiva VGMGG', lambda r: '\n{0} \u2014 {1} (Siiva list by {2})'.format(r[0], r[1], r[2]), to_split, game, song):
@@ -345,5 +345,7 @@ class RadioBot(discord.Client):
             elif command == 'r.echo':
                 await message.channel.send(message.content[len(command):].lstrip())
 
-client = RadioBot(activity=discord.Activity(name='j.help, r.help', type=discord.ActivityType.listening))
+msgIntents = discord.Intents.default()
+msgIntents.message_content = True
+client = RadioBot(intents=msgIntents, activity=discord.Activity(name='j.help, r.help', type=discord.ActivityType.listening))
 client.run(TOKEN)
