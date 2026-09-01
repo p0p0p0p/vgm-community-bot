@@ -2,6 +2,18 @@ import discord
 from fuzzywuzzy import fuzz
 import requests
 import csv
+import logging
+
+logger = logging.getLogger('vgmbot')
+logger.setLevel(logging.INFO)
+stderrHandler = logging.StreamHandler()
+stderrHandler.setFormatter(
+    logging.Formatter(
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+)
+logger.addHandler(stderrHandler)
 
 """
 TODO:
@@ -181,7 +193,7 @@ def query_private(source, label, generator, joint, game, song):
 
 class RadioBot(discord.Client):
     async def on_ready(self):
-        print('Logged in as {0} on {1}'.format(self.user, ', '.join(g.name for g in self.guilds)))
+        logger.info('Logged in as {0} on {1}'.format(self.user, ', '.join(g.name for g in self.guilds)))
 
     async def on_message(self, message):
         if message.author == self.user:
