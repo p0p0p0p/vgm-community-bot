@@ -146,7 +146,7 @@ def fuzzy_match(query, target):
                 if not (' {0} '.format(n) in target or ' {0} '.format(NUMWORDS[n][0].lower()) in target or ' {0} '.format(NUMWORDS[n][1].lower()) in target):
                     return False
 
-    if fuzz.ratio(query, target) >= 80:  # Approximate full match
+    if fuzz.ratio(query, target) >= 90:  # Approximate full match
         return True
 
     query_tokens = query.split()
